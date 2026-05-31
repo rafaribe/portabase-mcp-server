@@ -1,0 +1,58 @@
+services:
+  portabase:
+    image: portabase/portabase:1
+    ports:
+      - "8887:80"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://devuser:changeme@db:5432/devdb?schema=public
+      PROJECT_NAME: "Portabase Test"
+      PROJECT_URL: http://localhost:8887
+      PROJECT_SECRET: test-secret-key-for-integration-tests
+      AUTH_DEFAULT_USER_NAME: "Test Admin"
+      AUTH_DEFAULT_USER: admin@test.local
+      AUTH_DEFAULT_PASSWORD: "TestPass123!"
+      AUTH_EMAIL_PASSWORD_ENABLED: "true"
+      AUTH_SIGNUP_ENABLED: "true"
+      LOG_LEVEL: warn
+      OPENAPI_ENABLED: "true"
+      API_ENABLED: "true"
+    volumes:
+      - portabase-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: devdb
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: changeme
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d devdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # A test PostgreSQL database that the agent would back up
+  test-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U testuser -d testdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  portabase-data:

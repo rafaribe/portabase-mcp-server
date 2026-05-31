@@ -19,7 +19,7 @@ jobs:
         with:
           go-version: "1.23"
       - run: go vet ./...
-      - run: go test ./...
+      - run: go test ./internal/... -v
 
   integration:
     runs-on: ubuntu-latest
@@ -29,10 +29,55 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-      - run: INTEGRATION=1 go test ./tests/... -v
+      - run: INTEGRATION=1 go test ./tests/... -run TestIntegration -v
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Start Portabase stack
+        run: docker compose -f docker-compose.integration.yml up -d
+
+      - name: Wait for Portabase
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:8887/api/health; then
+              echo "Portabase ready (${i}s)"
+              break
+            fi
+            if [ "$i" -eq 90 ]; then
+              echo "Portabase failed to start"
+              docker compose -f docker-compose.integration.yml logs portabase
+              exit 1
+            fi
+            sleep 1
+          done
+          sleep 3
+
+      - name: Create API key
+        id: apikey
+        run: |
+          KEY=$(go run ./cmd/setup-apikey/main.go http://localhost:8887 admin@test.local "TestPass123!")
+          echo "key=$KEY" >> $GITHUB_OUTPUT
+
+      - name: Run e2e tests
+        env:
+          E2E: "1"
+          PORTABASE_BASE_URL: http://localhost:8887
+          PORTABASE_API_TOKEN: ${{ steps.apikey.outputs.key }}
+        run: go test ./tests/... -run TestE2E -v -timeout 60s
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.integration.yml down -v
 
   publish:
-    needs: [test, integration]
+    needs: [test, integration, e2e]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
