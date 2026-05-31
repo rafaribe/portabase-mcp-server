@@ -26,7 +26,10 @@ func main() {
 	var err error
 	for attempt := 1; attempt <= 5; attempt++ {
 		body := fmt.Sprintf(`{"email":"%s","password":"%s"}`, email, password)
-		signInResp, err = client.Post(baseURL+"/api/auth/sign-in/email", "application/json", strings.NewReader(body))
+		req, _ := http.NewRequest("POST", baseURL+"/api/auth/sign-in/email", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", baseURL)
+		signInResp, err = client.Do(req)
 		if err == nil && signInResp.StatusCode < 500 {
 			break
 		}
@@ -62,6 +65,7 @@ func main() {
 	req, _ := http.NewRequest("POST", baseURL+"/api/auth/api-key/create",
 		strings.NewReader(`{"name":"e2e-test-key","configId":"standard"}`))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", baseURL)
 
 	// If we got a token in the body, also set it as bearer
 	if token, ok := signInBody["token"].(string); ok && token != "" {
